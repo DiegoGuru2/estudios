@@ -1410,3 +1410,240 @@ mark.tts-word-mark {
   border-radius: 4px;
   box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
 }
+
+/* ===== Diseño 100% Responsive (Móvil, Tablet y Escritorio) + Modal App Local ===== */
+.brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.brand-row .brand {
+  margin-bottom: 0.85rem;
+}
+
+.sidebar-close-btn {
+  display: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  font-size: 1rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.85rem;
+}
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(2px);
+  z-index: 95;
+  display: none;
+}
+
+.sidebar-backdrop.open {
+  display: block;
+}
+
+.save-pill {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--accent-emerald);
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  padding: 0.38rem 0.7rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: transform 0.2s, background 0.2s;
+  white-space: nowrap;
+}
+
+.save-pill.saved-flash {
+  transform: scale(1.06);
+  background: rgba(16, 185, 129, 0.28);
+}
+
+/* Modal Instalar / Descargar App */
+.install-modal-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  max-width: 680px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 1.5rem 1.75rem;
+  box-shadow: var(--shadow-lg);
+}
+
+.install-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.install-modal-header h3 {
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.install-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.install-option-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.install-option-item h4 {
+  font-size: 0.96rem;
+  margin-bottom: 0.25rem;
+  color: var(--text-primary);
+}
+
+.install-option-item p {
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  max-width: 430px;
+}
+
+/* Breakpoints Responsive */
+@media (max-width: 960px) {
+  .sidebar {
+    width: min(86vw, 330px);
+    box-shadow: 8px 0 30px rgba(0, 0, 0, 0.6);
+  }
+  .sidebar-close-btn {
+    display: inline-flex;
+  }
+  .topbar {
+    padding: 0.7rem 1rem;
+  }
+  .content-container {
+    padding: 1.15rem 1rem;
+  }
+  .hide-md {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .hide-sm {
+    display: none;
+  }
+  .hero-banner {
+    padding: 1.25rem;
+    gap: 1rem;
+  }
+  .hero-banner h2 {
+    font-size: 1.3rem;
+  }
+  .topic-header-card {
+    padding: 1.15rem;
+  }
+  .topic-title-main {
+    font-size: 1.25rem;
+  }
+  .subjects-grid,
+  .key-points-grid,
+  .flashcards-grid,
+  .glossary-list {
+    grid-template-columns: 1fr;
+  }
+  .tools-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.6rem;
+  }
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.65rem;
+  }
+  .kpi-card {
+    padding: 0.9rem;
+  }
+  .kpi-card .kpi-val {
+    font-size: 1.35rem;
+  }
+  .example-header,
+  .example-body,
+  .question-card,
+  .flow-finish {
+    padding: 1rem;
+  }
+  .option-btn {
+    padding: 0.7rem 0.8rem;
+    font-size: 0.85rem;
+  }
+  .tts-controls-row {
+    gap: 0.35rem;
+  }
+  .tts-controls-row > div[style*="margin-left:auto"] {
+    margin-left: 0 !important;
+    width: 100%;
+  }
+  .tts-controls-row > div[style*="margin-left:auto"] .btn {
+    flex: 1;
+    justify-content: center;
+  }
+  .sim-config {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sim-config label,
+  .sim-config select {
+    width: 100%;
+  }
+  .modal-overlay {
+    padding: 0.75rem;
+  }
+  .install-modal-card {
+    padding: 1.15rem;
+  }
+  .install-option-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .install-option-item .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 420px) {
+  .hide-xs {
+    display: none;
+  }
+  .topbar-actions {
+    gap: 0.35rem;
+  }
+  .btn {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.78rem;
+  }
+  .flow-steps button {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}

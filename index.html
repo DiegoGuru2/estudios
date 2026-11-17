@@ -2,8 +2,14 @@
 <html lang="es" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Plataforma Integral de Estudio — Máster en Ciberseguridad (5 Materias · 50 Temas · 500 Tests)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <meta name="theme-color" content="#3b82f6" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>CyberStudy Hub — Máster en Ciberseguridad (5 Materias · 50 Temas · 1000 Tests)</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" href="assets/icon-192.png" />
+  <link rel="apple-touch-icon" href="assets/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
@@ -18,15 +24,21 @@
   </script>
 </head>
 <body>
+  <!-- Fondo oscuro en móvil al abrir el menú lateral -->
+  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleMobileSidebar(false)"></div>
+
   <!-- Sidebar de Navegación por Materias y Temas -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <div class="brand" onclick="navigateDashboard()">
-        <div class="brand-icon">🛡️</div>
-        <div class="brand-text">
-          <h1>CyberStudy Hub</h1>
-          <span>5 Materias · 50 Temas · 500 Tests</span>
+      <div class="brand-row">
+        <div class="brand" onclick="navigateDashboard(); toggleMobileSidebar(false);">
+          <div class="brand-icon">🛡️</div>
+          <div class="brand-text">
+            <h1>CyberStudy Hub</h1>
+            <span>5 Materias · 50 Temas · 1000 Tests</span>
+          </div>
         </div>
+        <button class="sidebar-close-btn" onclick="toggleMobileSidebar(false)" aria-label="Cerrar menú">✕</button>
       </div>
       <div class="search-box">
         <span class="search-icon">🔍</span>
@@ -48,14 +60,18 @@
   <div class="main-wrapper">
     <header class="topbar">
       <div class="topbar-left">
-        <button class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')">
-          ☰ Temario
+        <button class="mobile-menu-btn" onclick="toggleMobileSidebar()" aria-label="Abrir temario">
+          ☰ <span class="hide-xs">Temario</span>
         </button>
         <div class="breadcrumb" id="breadcrumb"></div>
       </div>
       <div class="topbar-actions">
-        <button class="btn" onclick="navigateSimulacro()">🎯 Simulacro</button>
-        <button class="btn" onclick="toggleTheme()" title="Cambiar modo oscuro/claro">🌗 Tema</button>
+        <span class="save-pill" id="save-pill" title="Todo tu progreso se guarda automáticamente en este dispositivo">💾 <span class="hide-sm">Guardado local</span></span>
+        <button class="btn btn-primary" onclick="openInstallModal()" title="Instalar o descargar la aplicación en local">
+          📲 <span class="hide-xs">Descargar App</span>
+        </button>
+        <button class="btn" onclick="navigateSimulacro()">🎯 <span class="hide-sm">Simulacro</span></button>
+        <button class="btn" onclick="toggleTheme()" title="Cambiar modo oscuro/claro">🌗 <span class="hide-md">Tema</span></button>
       </div>
     </header>
 
@@ -65,6 +81,49 @@
   <!-- Modal para ampliar Esquemas -->
   <div class="modal-overlay" id="esquema-modal" onclick="closeModal()">
     <img id="esquema-modal-img" src="" alt="Esquema ampliado" />
+  </div>
+
+  <!-- Modal para Descargar / Instalar App y Guardado en Disco Local -->
+  <div class="modal-overlay" id="install-modal" onclick="if(event.target===this) closeInstallModal()">
+    <div class="install-modal-card">
+      <div class="install-modal-header">
+        <h3>📲 Instalar App y Guardado en Local</h3>
+        <button class="btn" onclick="closeInstallModal()">✕</button>
+      </div>
+      <p style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:1.1rem;">
+        Todo lo que avanzas (tests, notas, repaso espaciado, modo oscuro/claro y posición del audio) se guarda automáticamente en una <strong>doble base de datos local</strong> de tu navegador (<code>localStorage</code> + <code>IndexedDB</code> persistente). Además, tienes estas opciones para tener la App y tus datos siempre en tu equipo:
+      </p>
+
+      <div class="install-options-list">
+        <div class="install-option-item">
+          <div>
+            <h4>1. 🖥️📱 Instalar como Aplicación Nativa (PWA)</h4>
+            <p>Instala <strong>CyberStudy Hub</strong> con su propio icono en tu Escritorio de Windows/Mac o pantalla de inicio del móvil. Funciona 100% sin internet.</p>
+          </div>
+          <button class="btn btn-primary" id="pwa-install-btn" onclick="triggerPwaInstall()">📲 Instalar App</button>
+        </div>
+
+        <div class="install-option-item">
+          <div>
+            <h4>2. 📦 Descargar App Portátil en 1 Solo Archivo (HTML con tu progreso)</h4>
+            <p>Descarga toda la plataforma (los 50 temas, 1.000 preguntas y <strong>todo tu progreso actual incrustado</strong>) en un único archivo <code>CyberStudy_Portable.html</code> para abrirlo con doble clic en cualquier ordenador sin internet.</p>
+          </div>
+          <button class="btn btn-success" onclick="downloadStandaloneApp()">📥 Descargar App HTML</button>
+        </div>
+
+        <div class="install-option-item">
+          <div>
+            <h4>3. 🔗 Auto-guardar en un archivo de tu disco duro</h4>
+            <p>Elige un archivo <code>.json</code> en tu carpeta y cada vez que respondas una pregunta o escribas un apunte se actualizará automáticamente en tu disco (<span id="fs-sync-status">No vinculado</span>).</p>
+          </div>
+          <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+            <button class="btn" onclick="connectLocalFile()">🔗 Vincular archivo</button>
+            <button class="btn" onclick="exportProgress()">💾 Descargar copia (.json)</button>
+            <button class="btn" onclick="importProgress()">📂 Cargar copia</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="data.js"></script>

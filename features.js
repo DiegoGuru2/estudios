@@ -1373,3 +1373,242 @@ navigateSimulacro = function (subjId = null) {
   renderAll();
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
+
+// =====================================================================
+//  Persistencia Local Reforzada (IndexedDB + Archivo Local + App Portátil + PWA)
+// =====================================================================
+
+let deferredPwaPrompt = null;
+let localFileHandle = null;
+
+// Registrar Service Worker para funcionamiento 100% offline e instalación PWA
+if (typeof window !== "undefined" && "serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
+
+if (typeof window !== "undefined" && navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().catch(() => {});
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPwaPrompt = e;
+  });
+}
+
+function toggleMobileSidebar(force) {
+  const sb = document.getElementById("sidebar");
+  const bd = document.getElementById("sidebar-backdrop");
+  if (!sb) return;
+  const open = typeof force === "boolean" ? force : !sb.classList.contains("open");
+  sb.classList.toggle("open", open);
+  if (bd) bd.classList.toggle("open", open);
+}
+
+function openInstallModal() {
+  const m = document.getElementById("install-modal");
+  if (m) m.classList.add("open");
+}
+
+function closeInstallModal() {
+  const m = document.getElementById("install-modal");
+  if (m) m.classList.remove("open");
+}
+
+async function triggerPwaInstall() {
+  if (deferredPwaPrompt) {
+    deferredPwaPrompt.prompt();
+    await deferredPwaPrompt.userChoice;
+    deferredPwaPrompt = null;
+    closeInstallModal();
+    return;
+  }
+  if (location.protocol === "file:") {
+    alert(
+      "Estás ejecutando la aplicación directamente desde tu carpeta local (file://). Si quieres un único archivo portátil con tu progreso, pulsa la Opción 2 («📥 Descargar App HTML»). Si la abres desde GitHub Pages (https://diegoguru2.github.io/estudios/), podrás instalarla con icono propio desde el navegador."
+    );
+  } else {
+    alert(
+      "Para instalar la App en tu dispositivo: en Chrome/Edge pulsa el icono de «Instalar aplicación» en la barra de direcciones (derecha), o en Safari/iOS pulsa «Compartir → Añadir a pantalla de inicio»."
+    );
+  }
+}
+
+// IndexedDB respaldo automático
+function idbSave(payload) {
+  if (typeof indexedDB === "undefined") return;
+  try {
+    const req = indexedDB.open("CyberStudyDB", 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("state")) db.createObjectStore("state");
+    };
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction("state", "readwrite");
+      tx.objectStore("state").put(payload, "current");
+    };
+  } catch (e) {}
+}
+
+function idbRestoreIfNeeded() {
+  if (typeof indexedDB === "undefined") return;
+  try {
+    if (localStorage.getItem(STORAGE_KEY)) return;
+    // Si viene de un HTML portátil con progreso incrustado:
+    if (typeof window !== "undefined" && window.EMBEDDED_PROGRESS) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(window.EMBEDDED_PROGRESS));
+      loadState();
+      renderAll();
+      return;
+    }
+    const req = indexedDB.open("CyberStudyDB", 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains("state")) db.createObjectStore("state");
+    };
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction("state", "readonly");
+      const getReq = tx.objectStore("state").get("current");
+      getReq.onsuccess = () => {
+        if (getReq.result && !localStorage.getItem(STORAGE_KEY)) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(getReq.result));
+          loadState();
+          renderAll();
+        }
+      };
+    };
+  } catch (e) {}
+}
+
+// Auto-guardado en archivo local del disco duro (File System Access API)
+async function connectLocalFile() {
+  if (!("showSaveFilePicker" in window)) {
+    alert("Tu navegador no soporta vinculación directa de archivo en vivo; usa el botón «💾 Descargar copia (.json)».");
+    return;
+  }
+  try {
+    localFileHandle = await window.showSaveFilePicker({
+      suggestedName: "mi-progreso-ciberseguridad.json",
+      types: [{ description: "Archivo de progreso JSON", accept: { "application/json": [".json"] } }]
+    });
+    await syncToLocalFile();
+    const st = document.getElementById("fs-sync-status");
+    if (st) {
+      st.textContent = "✅ Vinculado y sincronizando en vivo";
+      st.style.color = "var(--accent-emerald)";
+    }
+  } catch (e) {}
+}
+
+async function syncToLocalFile() {
+  if (!localFileHandle) return;
+  try {
+    const writable = await localFileHandle.createWritable();
+    await writable.write(
+      JSON.stringify(
+        { app: "CyberStudyHub", version: 1, updatedAt: new Date().toISOString(), data: progressPayload() },
+        null,
+        2
+      )
+    );
+    await writable.close();
+  } catch (e) {}
+}
+
+function flashSavePill() {
+  const pill = document.getElementById("save-pill");
+  if (!pill) return;
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  pill.innerHTML = `💾 <span class="hide-sm">Guardado ${hh}:${mm}</span>`;
+  pill.classList.add("saved-flash");
+  setTimeout(() => pill.classList.remove("saved-flash"), 700);
+}
+
+const _saveStatePrev = saveState;
+saveState = function () {
+  _saveStatePrev();
+  const payload = progressPayload();
+  idbSave(payload);
+  syncToLocalFile();
+  flashSavePill();
+};
+
+// Descargar toda la aplicación + progreso actual en un único archivo HTML portátil
+async function downloadStandaloneApp() {
+  try {
+    let cssText = "";
+    for (const sheet of Array.from(document.styleSheets)) {
+      try {
+        for (const rule of Array.from(sheet.cssRules)) {
+          cssText += rule.cssText + "\n";
+        }
+      } catch (e) {}
+    }
+    const [appJsResp, featJsResp] = await Promise.all([
+      fetch("app.js").then((r) => r.text()).catch(() => ""),
+      fetch("features.js").then((r) => r.text()).catch(() => "")
+    ]);
+
+    const bodyClone = document.body.cloneNode(true);
+    bodyClone.querySelectorAll("script").forEach((s) => s.remove());
+    const modal = bodyClone.querySelector("#install-modal");
+    if (modal) modal.classList.remove("open");
+
+    const embeddedProgress = JSON.stringify(progressPayload());
+    const embeddedData = JSON.stringify(window.STUDY_DATA);
+
+    const standaloneHtml = `<!DOCTYPE html>
+<html lang="es" data-theme="${state.settings.theme || "dark"}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>CyberStudy Hub Portátil — 5 Materias · 50 Temas · 1000 Tests</title>
+  <style>${cssText}</style>
+  <script>
+    window.EMBEDDED_PROGRESS = ${embeddedProgress};
+    try {
+      if (!localStorage.getItem("${STORAGE_KEY}")) {
+        localStorage.setItem("${STORAGE_KEY}", JSON.stringify(window.EMBEDDED_PROGRESS));
+      }
+    } catch (e) {}
+  <\/script>
+</head>
+<body>
+  ${bodyClone.innerHTML}
+  <script>window.STUDY_DATA = ${embeddedData};<\/script>
+  <script>${appJsResp}<\/script>
+  <script>${featJsResp}<\/script>
+</body>
+</html>`;
+
+    const blob = new Blob([standaloneHtml], { type: "text/html;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `CyberStudy_Portable_${new Date().toISOString().slice(0, 10)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    alert("Se descargará tu archivo de progreso; úsalo junto con index.html.");
+    exportProgress();
+  }
+}
+
+const _selectTopicMobileWrap = selectTopic;
+selectTopic = function (topicKey, tab = null) {
+  toggleMobileSidebar(false);
+  _selectTopicMobileWrap(topicKey, tab);
+};
+
+if (typeof window !== "undefined") {
+  window.addEventListener("DOMContentLoaded", () => {
+    idbRestoreIfNeeded();
+  });
+}
