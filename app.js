@@ -1219,7 +1219,7 @@ function renderTopicFlow() {
         </span>
         <div class="flow-dots">${dots}</div>
       </div>
-      <h2 class="topic-title-main">${escapeHtml(topic.title)}</h2>
+      <h2 class="topic-title-main" data-tts-seg="0">${escapeHtml(topic.title)}</h2>
       ${typeof renderTopicTools === "function" ? renderTopicTools(topic) : ""}
       <div class="flow-steps">
         <button onclick="scrollToStep('paso-resumen')"><b>1</b> Lo esencial</button>
@@ -1232,7 +1232,7 @@ function renderTopicFlow() {
     <section class="flow-step" id="paso-resumen">
       <h3 class="flow-step-title"><span>1</span> Lo esencial del tema</h3>
       <div class="summary-box">
-        ${(topic.summary || "").split("\n\n").map((p) => `<p>${escapeHtml(p)}</p>`).join("")}
+        ${(topic.summary || "").split("\n\n").map((p, pi) => `<p data-tts-seg="${pi + 1}" onclick="if(window.ttsJumpIfActive) ttsJumpIfActive('${topic.key}', ${pi + 1})">${escapeHtml(p)}</p>`).join("")}
       </div>
       ${
         roadmap.length
@@ -1245,15 +1245,18 @@ function renderTopicFlow() {
       }
       <h4 class="flow-sub">🎯 Lo que tienes que saber sí o sí</h4>
       <div class="key-points-grid">
-        ${kps
-          .map(
-            (kp, i) => `
-          <div class="key-point-card">
+        ${(() => {
+          const baseSeg = (topic.summary || "").split("\n\n").length + 1;
+          return kps
+            .map(
+              (kp, i) => `
+          <div class="key-point-card" data-tts-seg="${baseSeg + i}" onclick="if(window.ttsJumpIfActive) ttsJumpIfActive('${topic.key}', ${baseSeg + i})">
             <h4><span style="color:var(--accent-emerald)">${i + 1}.</span> ${escapeHtml(kp.title)}</h4>
-            <p>${escapeHtml(kp.desc)}</p>
+            <p data-tts-body="${baseSeg + i}">${escapeHtml(kp.desc)}</p>
           </div>`
-          )
-          .join("")}
+            )
+            .join("");
+        })()}
       </div>
       ${typeof renderTopicExtras === "function" ? renderTopicExtras(subj, topic) : ""}
     </section>
@@ -1261,17 +1264,20 @@ function renderTopicFlow() {
     <section class="flow-step" id="paso-ejemplos">
       <h3 class="flow-step-title"><span>2</span> Ejemplos prácticos</h3>
       <div class="examples-list">
-        ${exs
-          .map((ex, i) => {
-            const codeId = `code-${topic.key}-${i}`;
-            return `
-          <div class="example-card">
+        ${(() => {
+          const baseExSeg = (topic.summary || "").split("\n\n").length + 1 + kps.length;
+          return exs
+            .map((ex, i) => {
+              const codeId = `code-${topic.key}-${i}`;
+              const segIdx = baseExSeg + i;
+              return `
+          <div class="example-card" data-tts-seg="${segIdx}">
             <div class="example-header">
               <h3>⚡ ${escapeHtml(ex.title)}</h3>
               <span class="example-badge">${escapeHtml(ex.badge || "Caso práctico")}</span>
             </div>
             <div class="example-body">
-              <div class="example-scenario"><strong>📌 Escenario:</strong> ${escapeHtml(ex.scenario)}</div>
+              <div class="example-scenario" data-tts-body="${segIdx}"><strong>📌 Escenario:</strong> ${escapeHtml(ex.scenario)}</div>
               <div class="code-block-wrap">
                 <div class="code-block-bar">
                   <span>Resolución paso a paso</span>
@@ -1282,8 +1288,9 @@ function renderTopicFlow() {
               <div class="example-takeaway"><strong>🎓 Para el examen:</strong> ${escapeHtml(ex.takeaway)}</div>
             </div>
           </div>`;
-          })
-          .join("")}
+            })
+            .join("");
+        })()}
       </div>
     </section>
 

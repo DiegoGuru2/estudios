@@ -12,7 +12,8 @@ const LETTERS = ["A", "B", "C", "D"];
 // ---------- Estado extendido ----------
 state.srs = {};          // { qid: {box, due, fails, last} }
 state.notes = {};        // { topicKey: "texto" }
-state.settings = { shuffle: true };
+state.audioPos = {};     // { topicKey: { seg: 0, charOffset: 0 } }
+state.settings = { shuffle: true, ttsRate: 1 };
 state.shuffleCache = {}; // { qid: ["C","A","D","B"] } (solo sesión)
 state.review = null;
 state.glossaryFilter = "all";
@@ -28,7 +29,8 @@ loadState = function () {
     state.examSubmitted = s.examSubmitted || {};
     state.srs = s.srs || {};
     state.notes = s.notes || {};
-    state.settings = Object.assign({ shuffle: true }, s.settings || {});
+    state.audioPos = s.audioPos || {};
+    state.settings = Object.assign({ shuffle: true, ttsRate: 1 }, s.settings || {});
   } catch (e) {
     console.warn("No se pudo cargar el progreso:", e);
   }
@@ -42,6 +44,7 @@ function progressPayload() {
     examSubmitted: state.examSubmitted,
     srs: state.srs,
     notes: state.notes,
+    audioPos: state.audioPos,
     settings: state.settings
   };
 }
@@ -755,12 +758,85 @@ function renderCompareView() {
 }
 
 // ---------- Bloques que se insertan en la página de cada tema ----------
+function buildTtsSegments(topic) {
+  const segs = [];
+  segs.push({
+    seg: 0,
+    label: "Título del tema",
+    prefix: "",
+    body: topic.title
+  });
+  const paras = (topic.summary || "").split("\n\n");
+  paras.forEach((p, idx) => {
+    segs.push({
+      seg: segs.length,
+      label: `Resumen · Párrafo ${idx + 1}`,
+      prefix: "",
+      body: p
+    });
+  });
+  (topic.key_points || []).forEach((kp, idx) => {
+    segs.push({
+      seg: segs.length,
+      label: `Punto clave #${idx + 1}: ${kp.title}`,
+      prefix: `Punto clave ${idx + 1}. ${kp.title}. `,
+      body: kp.desc
+    });
+  });
+  (topic.examples || []).forEach((ex, idx) => {
+    segs.push({
+      seg: segs.length,
+      label: `Ejemplo práctico #${idx + 1}: ${ex.title}`,
+      prefix: `Ejemplo práctico ${idx + 1}. ${ex.title}. `,
+      body: `${ex.scenario} Conclusión para el examen: ${ex.takeaway}`
+    });
+  });
+  return segs;
+}
+
 function renderTopicTools(topic) {
+  const segs = buildTtsSegments(topic);
+  const saved = state.audioPos[topic.key] || { seg: 0, charOffset: 0 };
+  const hasSavedPos = saved.seg > 0 || saved.charOffset > 0;
+  const isThisPlaying = ttsState.topicKey === topic.key && ttsState.status === "playing";
+  const isThisPaused = ttsState.topicKey === topic.key && ttsState.status === "paused";
+  const curSeg = Math.min(saved.seg || 0, segs.length - 1);
+  const pct = Math.round(((curSeg + 1) / segs.length) * 100);
+  const rate = state.settings.ttsRate || 1;
+
+  let mainBtnLabel = "▶ Escuchar clase";
+  if (isThisPlaying) {
+    mainBtnLabel = "⏸ Pausar lectura";
+  } else if (isThisPaused || hasSavedPos) {
+    mainBtnLabel = `▶ Continuar (Bloque ${curSeg + 1}/${segs.length})`;
+  }
+
   return `
-    <div class="topic-tools">
-      <button class="btn" id="tts-btn" onclick="toggleSpeak('${topic.key}')">🔊 Escuchar resumen</button>
-      <button class="btn" onclick="printTopics(['${topic.key}'])">🖨️ Imprimir / PDF</button>
-      <button class="btn" onclick="scrollToStep('paso-apuntes')">📝 Mis apuntes</button>
+    <div class="tts-player-box" id="tts-player-box">
+      <div class="tts-controls-row">
+        <button class="btn btn-primary" id="tts-btn" onclick="ttsPlayPause('${topic.key}')">${mainBtnLabel}</button>
+        <button class="btn" onclick="ttsStep('${topic.key}', -1)" title="Bloque anterior">⏮</button>
+        <button class="btn" onclick="ttsStep('${topic.key}', 1)" title="Bloque siguiente">⏭</button>
+        <button class="btn" onclick="ttsReset('${topic.key}')" title="Reiniciar desde el principio">⏹ Reiniciar</button>
+        <select class="btn" onchange="ttsSetRate('${topic.key}', this.value)" title="Velocidad de lectura">
+          <option value="1" ${rate == 1 ? "selected" : ""}>1x Normal</option>
+          <option value="1.25" ${rate == 1.25 ? "selected" : ""}>1.25x Rápido</option>
+          <option value="1.5" ${rate == 1.5 ? "selected" : ""}>1.5x Muy rápido</option>
+        </select>
+        <span class="tts-seg-badge" id="tts-seg-badge">
+          📍 Bloque ${curSeg + 1}/${segs.length}: ${escapeHtml(segs[curSeg].label)}
+        </span>
+        <div style="margin-left:auto; display:flex; gap:0.4rem;">
+          <button class="btn" onclick="printTopics(['${topic.key}'])">🖨️ Imprimir / PDF</button>
+          <button class="btn" onclick="scrollToStep('paso-apuntes')">📝 Mis apuntes</button>
+        </div>
+      </div>
+      <div class="tts-progress-track" onclick="ttsSeekBar(event, '${topic.key}')">
+        <div class="tts-progress-fill" id="tts-progress-fill" style="width:${hasSavedPos || isThisPlaying ? pct : 0}%"></div>
+      </div>
+      <div class="tts-live-caption" id="tts-live-caption">
+        <span style="color:var(--text-muted)">💡 Pulsa <strong>▶ Escuchar clase</strong> (o haz clic sobre cualquier párrafo o tarjeta) para que se lea en voz alta marcando en vivo cada palabra y apartado por donde va.</span>
+      </div>
     </div>`;
 }
 
@@ -802,32 +878,290 @@ function saveNote(key, value) {
   }, 400);
 }
 
-// ---------- Audio (lectura en voz alta) ----------
-function toggleSpeak(topicKey) {
+// ---------- Reproductor Interactivo de Clase con Pausa Persistente y Resaltado en Vivo ----------
+const ttsState = {
+  topicKey: null,
+  status: "idle", // 'idle' | 'playing' | 'paused'
+  segs: [],
+  segIdx: 0,
+  charOffset: 0,
+  fallbackTimer: null,
+  boundaryWorked: false,
+  originalHtmlMap: {}
+};
+
+function clearDomHighlights() {
+  if (typeof document === "undefined" || !document.querySelectorAll) return;
+  document.querySelectorAll(".tts-active-seg").forEach((el) => {
+    el.classList.remove("tts-active-seg");
+  });
+  for (const [segId, origHtml] of Object.entries(ttsState.originalHtmlMap)) {
+    const target = findBodyTarget(segId);
+    if (target) target.innerHTML = origHtml;
+  }
+  ttsState.originalHtmlMap = {};
+}
+
+function findBodyTarget(segIdx) {
+  if (typeof document === "undefined" || !document.querySelector) return null;
+  const bodyEl = document.querySelector(`[data-tts-body="${segIdx}"]`);
+  if (bodyEl) return bodyEl;
+  return document.querySelector(`[data-tts-seg="${segIdx}"]`);
+}
+
+function highlightWithWordRange(fullText, startChar, endChar) {
+  const safeStart = Math.max(0, Math.min(startChar, fullText.length));
+  const safeEnd = Math.max(safeStart, Math.min(endChar, fullText.length));
+  const before = escapeHtml(fullText.slice(0, safeStart));
+  const active = escapeHtml(fullText.slice(safeStart, safeEnd));
+  const after = escapeHtml(fullText.slice(safeEnd));
+  return `${before}<mark class="tts-word-mark">${active}</mark>${after}`;
+}
+
+function highlightWordAtOffset(segObj, fullSpokenText, absCharIndex) {
+  // Update live caption box
+  const captionEl = document.getElementById("tts-live-caption");
+  const rest = fullSpokenText.slice(absCharIndex);
+  const wordMatch = rest.match(/^\S+/);
+  const wordLen = wordMatch ? wordMatch[0].length : 1;
+
+  if (captionEl) {
+    captionEl.innerHTML = `<span class="tts-caption-tag">${escapeHtml(segObj.label)}:</span> ` +
+      highlightWithWordRange(fullSpokenText, absCharIndex, absCharIndex + wordLen);
+  }
+
+  // Also highlight the word inside the actual paragraph/card on the page!
+  const prefixLen = (segObj.prefix || "").length;
+  if (absCharIndex >= prefixLen) {
+    const bodyOffset = absCharIndex - prefixLen;
+    const bodyText = segObj.body || "";
+    if (bodyOffset < bodyText.length) {
+      const target = findBodyTarget(segObj.seg);
+      if (target && !target.querySelector("strong")) {
+        if (!(segObj.seg in ttsState.originalHtmlMap)) {
+          ttsState.originalHtmlMap[segObj.seg] = target.innerHTML;
+        }
+        const bRest = bodyText.slice(bodyOffset);
+        const bMatch = bRest.match(/^\S+/);
+        const bLen = bMatch ? bMatch[0].length : 1;
+        target.innerHTML = highlightWithWordRange(bodyText, bodyOffset, bodyOffset + bLen);
+      }
+    }
+  }
+}
+
+function updateTtsPlayerUI(topicKey) {
+  const found = findTopic(topicKey);
+  if (!found) return;
+  const segs = ttsState.segs.length ? ttsState.segs : buildTtsSegments(found.topic);
+  const saved = state.audioPos[topicKey] || { seg: 0, charOffset: 0 };
+  const curSeg = Math.min(saved.seg || 0, segs.length - 1);
+
+  const btn = document.getElementById("tts-btn");
+  if (btn) {
+    if (ttsState.topicKey === topicKey && ttsState.status === "playing") {
+      btn.textContent = "⏸ Pausar lectura";
+    } else if ((ttsState.topicKey === topicKey && ttsState.status === "paused") || saved.seg > 0 || saved.charOffset > 0) {
+      btn.textContent = `▶ Continuar (Bloque ${curSeg + 1}/${segs.length})`;
+    } else {
+      btn.textContent = "▶ Escuchar clase";
+    }
+  }
+
+  const badge = document.getElementById("tts-seg-badge");
+  if (badge && segs[curSeg]) {
+    badge.textContent = `📍 Bloque ${curSeg + 1}/${segs.length}: ${segs[curSeg].label}`;
+  }
+
+  const fill = document.getElementById("tts-progress-fill");
+  if (fill) {
+    const pct = Math.round(((curSeg + 1) / segs.length) * 100);
+    fill.style.width = `${pct}%`;
+  }
+}
+
+function speakCurrentSegment(topicKey) {
   if (!("speechSynthesis" in window)) {
     alert("Tu navegador no permite la lectura en voz alta.");
     return;
   }
-  const btn = document.getElementById("tts-btn");
-  if (speechSynthesis.speaking) {
-    speechSynthesis.cancel();
-    if (btn) btn.textContent = "🔊 Escuchar resumen";
+  clearInterval(ttsState.fallbackTimer);
+  clearDomHighlights();
+
+  const found = findTopic(topicKey);
+  if (!found) return;
+  ttsState.topicKey = topicKey;
+  ttsState.segs = buildTtsSegments(found.topic);
+
+  const saved = state.audioPos[topicKey] || { seg: 0, charOffset: 0 };
+  if (saved.seg >= ttsState.segs.length) {
+    saved.seg = 0;
+    saved.charOffset = 0;
+  }
+  ttsState.segIdx = saved.seg;
+  ttsState.charOffset = saved.charOffset || 0;
+
+  const segObj = ttsState.segs[ttsState.segIdx];
+  const fullText = (segObj.prefix || "") + (segObj.body || "");
+  const startOffset = Math.min(ttsState.charOffset, Math.max(0, fullText.length - 1));
+  const sliceText = fullText.slice(startOffset);
+
+  // Highlight block in DOM and scroll smoothly into view
+  if (typeof document !== "undefined" && document.querySelector) {
+    const blockEl = document.querySelector(`[data-tts-seg="${segObj.seg}"]`);
+    if (blockEl) {
+      blockEl.classList.add("tts-active-seg");
+      blockEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+
+  ttsState.status = "playing";
+  ttsState.boundaryWorked = false;
+  updateTtsPlayerUI(topicKey);
+  highlightWordAtOffset(segObj, fullText, startOffset);
+
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(sliceText);
+  u.lang = "es-ES";
+  u.rate = Number(state.settings.ttsRate) || 1;
+  const voices = speechSynthesis.getVoices ? speechSynthesis.getVoices() : [];
+  const esVoice = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith("es"));
+  if (esVoice) u.voice = esVoice;
+
+  u.onboundary = (ev) => {
+    if (typeof ev.charIndex === "number") {
+      ttsState.boundaryWorked = true;
+      const absIdx = startOffset + ev.charIndex;
+      ttsState.charOffset = absIdx;
+      state.audioPos[topicKey] = { seg: ttsState.segIdx, charOffset: absIdx };
+      saveState();
+      highlightWordAtOffset(segObj, fullText, absIdx);
+    }
+  };
+
+  // Fallback progressive word highlighter in case the voice doesn't emit onboundary events
+  const charsPerSec = 14.5 * u.rate;
+  let simOffset = startOffset;
+  ttsState.fallbackTimer = setInterval(() => {
+    if (ttsState.status !== "playing" || ttsState.boundaryWorked) return;
+    simOffset = Math.min(fullText.length - 1, simOffset + Math.max(4, Math.round(charsPerSec * 0.25)));
+    // Snap to start of word
+    while (simOffset > 0 && simOffset < fullText.length && /\S/.test(fullText[simOffset - 1])) {
+      simOffset++;
+    }
+    ttsState.charOffset = simOffset;
+    state.audioPos[topicKey] = { seg: ttsState.segIdx, charOffset: simOffset };
+    highlightWordAtOffset(segObj, fullText, simOffset);
+  }, 250);
+
+  u.onend = () => {
+    clearInterval(ttsState.fallbackTimer);
+    if (ttsState.status !== "playing") return; // Was paused or cancelled manually
+    clearDomHighlights();
+    if (ttsState.segIdx + 1 < ttsState.segs.length) {
+      state.audioPos[topicKey] = { seg: ttsState.segIdx + 1, charOffset: 0 };
+      saveState();
+      speakCurrentSegment(topicKey);
+    } else {
+      // Finished the whole topic class!
+      ttsState.status = "idle";
+      state.audioPos[topicKey] = { seg: 0, charOffset: 0 };
+      saveState();
+      updateTtsPlayerUI(topicKey);
+      const captionEl = document.getElementById("tts-live-caption");
+      if (captionEl) {
+        captionEl.innerHTML = `✅ <strong>¡Lectura del tema completada!</strong> Puedes repetirla o bajar al test del tema.`;
+      }
+    }
+  };
+
+  speechSynthesis.speak(u);
+}
+
+function ttsPlayPause(topicKey) {
+  if (!("speechSynthesis" in window)) {
+    alert("Tu navegador no permite la lectura en voz alta.");
     return;
   }
-  const { topic } = findTopic(topicKey);
-  const parts = [topic.title + ".", topic.summary, "Puntos clave."];
-  (topic.key_points || []).forEach((k, i) => parts.push(`${i + 1}. ${k.title}. ${k.desc}`));
-  const u = new SpeechSynthesisUtterance(parts.join(" ").replace(/\n+/g, " "));
-  u.lang = "es-ES";
-  u.rate = 1;
-  const voice = speechSynthesis.getVoices().find((v) => v.lang && v.lang.toLowerCase().startsWith("es"));
-  if (voice) u.voice = voice;
-  u.onend = () => {
-    const b = document.getElementById("tts-btn");
-    if (b) b.textContent = "🔊 Escuchar resumen";
-  };
-  speechSynthesis.speak(u);
-  if (btn) btn.textContent = "⏹ Parar lectura";
+  if (ttsState.topicKey === topicKey && ttsState.status === "playing") {
+    // Pause and persist exact position!
+    ttsState.status = "paused";
+    clearInterval(ttsState.fallbackTimer);
+    state.audioPos[topicKey] = { seg: ttsState.segIdx, charOffset: ttsState.charOffset };
+    saveState();
+    speechSynthesis.cancel();
+    updateTtsPlayerUI(topicKey);
+    return;
+  }
+  // Resume or start from saved segment + charOffset
+  speakCurrentSegment(topicKey);
+}
+
+function ttsStep(topicKey, delta) {
+  const found = findTopic(topicKey);
+  if (!found) return;
+  const segs = buildTtsSegments(found.topic);
+  const saved = state.audioPos[topicKey] || { seg: 0, charOffset: 0 };
+  const nextSeg = Math.max(0, Math.min(segs.length - 1, (saved.seg || 0) + delta));
+  state.audioPos[topicKey] = { seg: nextSeg, charOffset: 0 };
+  saveState();
+  if (ttsState.status === "playing") {
+    speakCurrentSegment(topicKey);
+  } else {
+    clearDomHighlights();
+    const blockEl = document.querySelector && document.querySelector(`[data-tts-seg="${nextSeg}"]`);
+    if (blockEl) {
+      blockEl.classList.add("tts-active-seg");
+      blockEl.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    updateTtsPlayerUI(topicKey);
+  }
+}
+
+function ttsReset(topicKey) {
+  clearInterval(ttsState.fallbackTimer);
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  ttsState.status = "idle";
+  state.audioPos[topicKey] = { seg: 0, charOffset: 0 };
+  saveState();
+  clearDomHighlights();
+  updateTtsPlayerUI(topicKey);
+  const captionEl = document.getElementById("tts-live-caption");
+  if (captionEl) {
+    captionEl.innerHTML = `<span style="color:var(--text-muted)">🔄 Posición reiniciada al inicio del tema. Pulsa <strong>▶ Escuchar clase</strong> cuando quieras.</span>`;
+  }
+}
+
+function ttsSetRate(topicKey, rateVal) {
+  state.settings.ttsRate = parseFloat(rateVal) || 1;
+  saveState();
+  if (ttsState.topicKey === topicKey && ttsState.status === "playing") {
+    speakCurrentSegment(topicKey);
+  }
+}
+
+function ttsSeekBar(ev, topicKey) {
+  const found = findTopic(topicKey);
+  if (!found) return;
+  const segs = buildTtsSegments(found.topic);
+  const rect = ev.currentTarget.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+  const targetSeg = Math.min(segs.length - 1, Math.floor(ratio * segs.length));
+  state.audioPos[topicKey] = { seg: targetSeg, charOffset: 0 };
+  saveState();
+  speakCurrentSegment(topicKey);
+}
+
+window.ttsJumpIfActive = function (topicKey, segIndex) {
+  if (ttsState.status === "playing" || ttsState.status === "paused") {
+    state.audioPos[topicKey] = { seg: segIndex, charOffset: 0 };
+    saveState();
+    speakCurrentSegment(topicKey);
+  }
+};
+
+function toggleSpeak(topicKey) {
+  ttsPlayPause(topicKey);
 }
 
 // ---------- Copia de seguridad ----------
