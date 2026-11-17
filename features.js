@@ -13,7 +13,7 @@ const LETTERS = ["A", "B", "C", "D"];
 state.srs = {};          // { qid: {box, due, fails, last} }
 state.notes = {};        // { topicKey: "texto" }
 state.audioPos = {};     // { topicKey: { seg: 0, charOffset: 0 } }
-state.settings = { shuffle: true, ttsRate: 1 };
+state.settings = { shuffle: true, ttsRate: 1, theme: "dark" };
 state.shuffleCache = {}; // { qid: ["C","A","D","B"] } (solo sesión)
 state.review = null;
 state.glossaryFilter = "all";
@@ -30,7 +30,13 @@ loadState = function () {
     state.srs = s.srs || {};
     state.notes = s.notes || {};
     state.audioPos = s.audioPos || {};
-    state.settings = Object.assign({ shuffle: true, ttsRate: 1 }, s.settings || {});
+    state.settings = Object.assign({ shuffle: true, ttsRate: 1, theme: "dark" }, s.settings || {});
+    if (s.view && s.view !== "search" && s.view !== "review") state.view = s.view;
+    if (s.activeTopicKey) state.activeTopicKey = s.activeTopicKey;
+    if (s.openSubjects) state.openSubjects = Object.assign(state.openSubjects, s.openSubjects);
+    if (typeof document !== "undefined" && document.documentElement) {
+      document.documentElement.setAttribute("data-theme", state.settings.theme || "dark");
+    }
   } catch (e) {
     console.warn("No se pudo cargar el progreso:", e);
   }
@@ -38,6 +44,9 @@ loadState = function () {
 
 function progressPayload() {
   return {
+    view: state.view,
+    activeTopicKey: state.activeTopicKey,
+    openSubjects: state.openSubjects,
     completedTopics: state.completedTopics,
     userAnswers: state.userAnswers,
     testMode: state.testMode,
@@ -48,6 +57,33 @@ function progressPayload() {
     settings: state.settings
   };
 }
+
+toggleTheme = function () {
+  const root = document.documentElement;
+  const current = root.getAttribute("data-theme") || state.settings.theme || "dark";
+  const next = current === "light" ? "dark" : "light";
+  root.setAttribute("data-theme", next);
+  state.settings.theme = next;
+  saveState();
+};
+
+const _selectTopicBase = selectTopic;
+selectTopic = function (topicKey, tab = null) {
+  _selectTopicBase(topicKey, tab);
+  saveState();
+};
+
+const _navigateDashboardBase = navigateDashboard;
+navigateDashboard = function () {
+  _navigateDashboardBase();
+  saveState();
+};
+
+const _toggleSubjectBase = toggleSubject;
+toggleSubject = function (subjId) {
+  _toggleSubjectBase(subjId);
+  saveState();
+};
 
 saveState = function () {
   try {
@@ -1251,6 +1287,7 @@ function printSubject(subjId) {
 function goView(v) {
   state.view = v;
   document.getElementById("sidebar").classList.remove("open");
+  saveState();
   renderAll();
   window.scrollTo({ top: 0 });
 }
@@ -1332,6 +1369,7 @@ navigateSimulacro = function (subjId = null) {
   } else if (!state.simulacro.qids || !state.simulacro.qids.length) {
     generateSimulacroQuestions();
   }
+  saveState();
   renderAll();
   window.scrollTo({ top: 0, behavior: "smooth" });
 };
