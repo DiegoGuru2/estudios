@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plataforma Integral de Estudio — Máster en Ciberseguridad (5 Materias · 50 Temas · 500 Tests)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Sidebar de Navegación por Materias y Temas -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="brand" onclick="navigateDashboard()">
+        <div class="brand-icon">🛡️</div>
+        <div class="brand-text">
+          <h1>CyberStudy Hub</h1>
+          <span>5 Materias · 50 Temas · 500 Tests</span>
+        </div>
+      </div>
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input
+          type="text"
+          id="global-search"
+          placeholder="Buscar tema, concepto, pregunta..."
+          oninput="handleSearch(this.value)"
+        />
+      </div>
+    </div>
+
+    <div class="sidebar-stats" id="sidebar-stats"></div>
+
+    <nav class="nav-tree" id="nav-tree"></nav>
+  </aside>
+
+  <!-- Contenido Principal -->
+  <div class="main-wrapper">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="mobile-menu-btn" onclick="document.getElementById('sidebar').classList.toggle('open')">
+          ☰ Temario
+        </button>
+        <div class="breadcrumb" id="breadcrumb"></div>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn" onclick="navigateSimulacro()">🎯 Simulacro</button>
+        <button class="btn" onclick="toggleTheme()" title="Cambiar modo oscuro/claro">🌗 Tema</button>
+      </div>
+    </header>
+
+    <main class="content-container" id="main-content"></main>
+  </div>
+
+  <!-- Modal para ampliar Esquemas -->
+  <div class="modal-overlay" id="esquema-modal" onclick="closeModal()">
+    <img id="esquema-modal-img" src="" alt="Esquema ampliado" />
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+  <script src="features.js"></script>
+</body>
+</html>
